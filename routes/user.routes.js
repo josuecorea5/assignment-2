@@ -1,8 +1,6 @@
 const { Router } = require("express");
 const { check } = require("express-validator");
-// const { validateFields } = require("../middleware/validate-fields");
-// const { validateJWT } = require("../middleware/validate-jwt");
-// const { isAdminRole, hasRole } = require("../middleware/validate-role");
+
 const {
   validateFields,
   validateJWT,
@@ -35,9 +33,9 @@ router.post(
   }),
   check("email", "email is not valid").isEmail(),
   check("email").custom(emailExist),
-  // check("role", "is not a valid role").isIn(["ADMIN_ROLE", "USER_ROLE"]),
+  check("role", "is not a valid role").isIn(["ADMIN_ROLE", "USER_ROLE"]),
   // check("role").custom((role) => isAValidRole(role)),
-  check("role").custom(isAValidRole),
+  // check("role").custom(isAValidRole),
   validateFields,
   userPost
 );

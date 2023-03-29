@@ -10,14 +10,10 @@ const login = async (req, res = response) => {
   try {
     const user = await User.findOne({ email });
     if (!user)
-      return res
-        .status(400)
-        .json({ msg: "User or password are not corrects 1" });
+      return res.status(400).json({ msg: "User or password are not corrects" });
 
     if (!user.status)
-      return res
-        .status(400)
-        .json({ msg: "User or password are not corrects 2" });
+      return res.status(400).json({ msg: "User or password are not corrects" });
 
     const validatePassword = bcryptjs.compareSync(password, user.password);
     if (!validatePassword)

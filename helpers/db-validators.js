@@ -28,10 +28,20 @@ const productExistById = async (id) => {
   if (!productExist) throw new Error(`the product Id does not exist`);
 };
 
+const allowedCollections = async (collection = "", collections = []) => {
+  const isIncluded = collections.includes(collection);
+  if (!isIncluded)
+    throw new Error(
+      `La collection ${collection} is not allowed, ${collections}`
+    );
+  return true;
+};
+
 module.exports = {
   isAValidRole,
   emailExist,
   userByIdExist,
   categoryExistById,
   productExistById,
+  allowedCollections,
 };

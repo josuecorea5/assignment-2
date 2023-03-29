@@ -1,39 +1,101 @@
 const path = require("path");
-const { v4: uuidv4 } = require("uuid");
-
+const fs = require("fs");
 const { response } = require("express");
+const { fileUpload } = require("../helpers");
+const { User, Product } = require("../models");
 
-const loadFile = (req, res = response) => {
-  if (!req.files || Object.keys(req.files).length === 0 || !req.files.file) {
-    return res.status(400).json({
-      msg: "No files were uploaded.",
+const loadFile = async (req, res = response) => {
+  try {
+    const fullPath = await fileUpload(req.files, ["pdf"], "textos");
+    res.json({
+      fileName: fullPath,
+    });
+  } catch (msg) {
+    res.status(400).json({
+      msg,
     });
   }
+};
 
-  // The name of the input field (i.e. "sampleFile") is used to retrieve the uploaded file
-  const { file } = req.files;
+const updateImage = async (req, res = res) => {
+  const { id, collection } = req.params;
 
-  const cutedFileName = file.name.split(".");
-  const extension = cutedFileName[cutedFileName.length - 1];
+  let model;
 
-  const allowedExtentions = ["png", "jpg", "jpeg", "gif"];
-  if (!allowedExtentions.includes(extension))
-    return res.status(400).json({
-      msg: `The extension ${extension}, is not allowed. Allowed extensions: ${allowedExtentions}`,
-    });
+  switch (collection) {
+    case "users":
+      model = await User.findById(id);
+      if (!model)
+        return res
+          .status(400)
+          .json({ msg: `No user exists with the id: ${id}` });
+      break;
+    case "products":
+      model = await Product.findById(id);
+      if (!model)
+        return res
+          .status(400)
+          .json({ msg: `No product exists with the id: ${id}` });
+      break;
+    default:
+      return res.status(500).json({ msg: "I did not finish this part" });
+  }
 
-  const tempFileName = uuidv4() + "." + extension;
+  if (model.image) {
+    const imagePath = path.join(
+      __dirname,
+      "../uploads",
+      collection,
+      model.image
+    );
+    if (fs.existsSync(imagePath)) fs.unlinkSync(imagePath);
+  }
 
-  const uploadPath = path.join(__dirname, "../uploads/", tempFileName);
-
-  // Use the mv() method to place the file somewhere on your server
-  file.mv(uploadPath, function (err) {
-    if (err) return res.status(500).json({ err });
-
-    res.send(`File uploaded!: ${uploadPath}`);
+  const fileName = await fileUpload(req.files, undefined, collection);
+  model.image = fileName;
+  await model.save();
+  res.json({
+    model,
   });
+};
+
+const showImage = async (req, res = response) => {
+  const { id, collection } = req.params;
+
+  switch (collection) {
+    case "users":
+      model = await User.findById(id);
+      if (!model)
+        return res
+          .status(400)
+          .json({ msg: `No user exists with the id: ${id}` });
+      break;
+    case "products":
+      model = await Product.findById(id);
+      if (!model)
+        return res
+          .status(400)
+          .json({ msg: `No product exists with the id: ${id}` });
+      break;
+    default:
+      return res.status(500).json({ msg: "I did not finish this part" });
+  }
+
+  if (model.image) {
+    const imagePath = path.join(
+      __dirname,
+      "../uploads",
+      collection,
+      model.image
+    );
+    if (fs.existsSync(imagePath)) return res.sendFile(imagePath);
+  }
+  const imagePath = path.join(__dirname, "../assets/no-image.jpg");
+  res.sendFile(imagePath);
 };
 
 module.exports = {
   loadFile,
+  updateImage,
+  showImage,
 };
