@@ -3,21 +3,39 @@ const { OrderDetail, Invoice, Order } = require('../models');
 
 const getOrders = async (req = request, res = response) => {
   const { limit = 5, from = 0 } = req.query;
+  const userId = req.params.userId;
+  const invoices = await Invoice.find({user: userId}).skip(from).limit(limit);
+  const ordersId = invoices.map((invoice) => {
+    return Order.findOne({invoice: invoice._id})
+  });
+  const orders = await Promise.all(ordersId);
+
+  const responseOrders = invoices.map((invoice, index) => {
+    return {
+      orderId: orders[index]._id,
+      invoice: invoice._id,
+      total: invoice.total,
+      date: invoice.date,
+    }
+  });
+  
+  return res.status(200).json({
+    orders: responseOrders,
+  });
+}
+
+const getOrderById = async (req = request, res = response) => {
   const { id } = req.params;
   console.log(id);
-  const [orders, total] = await Promise.all([
+  const orders = await
     OrderDetail.find({ order: id })
       .populate('order', 'invoice')
-      .populate('product', 'name')
-      .skip(from)
-      .limit(limit),
-      OrderDetail.countDocuments({ order: id })
-  ]);
+      .populate('product', 'name');
+
   const invoiceId = orders[0].order.invoice;
-  console.log(orders);
   const invoice = await Invoice.findById(invoiceId);
   res.status(200).json({
-    order: orders[0]._id,
+    order: orders._id,
     products: orders.map((order) => {
       return {
         product: order.product, 
@@ -54,4 +72,4 @@ const createOrder = async (req, res = response) => {
   });
 };
 
-module.exports = {getOrders, createOrder}
+module.exports = {getOrderById, createOrder, getOrders}
