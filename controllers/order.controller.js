@@ -12,7 +12,6 @@ const getOrders = async (req = request, res = response) => {
     return Order.findOne({invoice: invoice._id})
   });
   const orders = await Promise.all(ordersId);
-
   const responseOrders = invoices.map((invoice, index) => {
     return {
       orderId: orders[index]._id,
@@ -52,34 +51,22 @@ const getOrderById = async (req = request, res = response) => {
 };
 
 const createOrder = async (req, res = response) => {
-  const { user, products } = req.body;
-  let totalProducts = products.reduce((acc, { unitPrice, quantity }) => {
-    return acc + unitPrice * quantity;
-  }, 0);
-  totalProducts.toFixed(2);
   const sessionCreate = await mongoose.startSession();
+  const { user, products } = req.body;
+  let totalProducts = calculateTotal(products);
   try {
     sessionCreate.startTransaction();
-    const invoice = new Invoice({user, total: totalProducts});
-    const { _id: idInvoice } = await invoice.save();
-    const order = new Order({invoice: idInvoice});
-    const { _id: idOrder } = await order.save();
-    const orderDetails = products.map((product) => {
-      return new OrderDetail({
-        product: product.id,
-        order: 'idOrder',
-        quantity: product.quantity,
-        unitPrice: product.unitPrice,
-      });
+    const idInvoice = await createInvoice(user, totalProducts);
+    const idOrder = await createNewOrder(idInvoice);
+    const orderDetails = await createOrderDetails(products, idOrder);
+    await OrderDetail.insertMany(orderDetails);
+    await sessionCreate.commitTransaction();
+    return res.status(201).json({
+      message: 'Order created successfully'
     });
-  await OrderDetail.insertMany(orderDetails);
-  await sessionCreate.commitTransaction();
-  res.status(201).json({
-    message: 'Order created successfully'
-  });
   } catch (error) {
     await sessionCreate.abortTransaction();
-    res.status(500).json({
+    return res.status(500).json({
       message: 'Error creating order',
       error: error.message
     });
@@ -95,23 +82,14 @@ const updateOrder = async (req, res) => {
   const getOrderDetails = await OrderDetail.find({ order: orderId });
   const getInvoice = await Order.findOne({_id: orderId}).select('invoice');
   let invoice = await Invoice.findById(getInvoice.invoice);
-  let totalProducts = products.reduce((acc, { unitPrice, quantity }) => {
-    return acc + unitPrice * quantity;
-  }, 0);
-  totalProducts.toFixed(2);
+  let totalProducts = calculateTotal(products);
   invoice.total = totalProducts;
   await invoice.save();
-  const deleteOrderDetails = getOrderDetails.filter((orderDetail) => {
-    const existProduct = products.find((product) => {
-      return orderDetail.product.equals(product.id);
-    });
-    return !existProduct;
-  }).map((orderDetail) => orderDetail._id);
-
+  const idDeleteOrderDetails = deleteOrderDetails(getOrderDetails, products)
   try {
     sessionUpdate.startTransaction();
-    if(deleteOrderDetails.length > 0) {
-      await OrderDetail.deleteMany({_id: {$in: deleteOrderDetails}});
+    if(idDeleteOrderDetails.length > 0) {
+      await OrderDetail.deleteMany({_id: {$in: idDeleteOrderDetails}});
     }
     const updatedProducts = products.map((product) => {
       const existOrderDetail =  getOrderDetails.find((orderDetail) => {
@@ -125,18 +103,56 @@ const updateOrder = async (req, res) => {
     });
     await Promise.all(updatedProducts);
     await sessionUpdate.commitTransaction();
-    res.status(200).json({
+    return res.status(200).json({
       message: 'Order updated successfully'
     });
   } catch (error) {
     await sessionUpdate.abortTransaction();
-    res.status(500).json({
+    return res.status(500).json({
       message: 'Error updating order',
     });
   } finally {
     sessionUpdate.endSession();
   }
+};
 
+const calculateTotal = (products) => {
+  const totalProducts = products.reduce((acc, { unitPrice, quantity }) => {
+    return acc + unitPrice * quantity;
+  }, 0);
+  return totalProducts.toFixed(2);
+};
+
+const createInvoice = async (user, totalProducts) => {
+  const invoice = new Invoice({user, total: totalProducts});
+  const { _id: idInvoice } = await invoice.save();
+  return idInvoice;
+};
+
+const createNewOrder = async(idInvoice) => {
+  const order = new Order({invoice: idInvoice});
+  const { _id: idOrder } = await order.save();
+  return idOrder;
+}
+
+const createOrderDetails = async(products, idOrder) => {
+  products.map((product) => {
+    return new OrderDetail({
+      product: product.id,
+      order: idOrder,
+      quantity: product.quantity,
+      unitPrice: product.unitPrice,
+    });
+  });
+};
+
+const deleteOrderDetails = (orderDetails, products) => {
+  return orderDetails.filter((orderDetail) => {
+    const existProduct = products.find((product) => {
+      return orderDetail.product.equals(product.id);
+    });
+    return !existProduct;
+  }).map((orderDetail) => orderDetail._id);
 };
 
 module.exports = {getOrderById, createOrder, getOrders, updateOrder}
